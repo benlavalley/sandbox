@@ -69,7 +69,8 @@ The E2B SDK works the same across all backends. Use `metadata.platform` to selec
 import Sandbox from "e2b";
 
 const opts = {
-  apiUrl: "http://localhost:49982",
+  apiUrl: "http://localhost:49982",     // control plane: create / list / kill
+  sandboxUrl: "http://localhost:49982", // data plane: commands / files / envd — required, the SDK does NOT fall back to apiUrl
   apiKey: "e2b_.....",
 };
 
