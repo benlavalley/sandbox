@@ -71,7 +71,7 @@ runs `bun build --compile`, and installs the binary onto your PATH:
 
 | OS          | Install location                                  |
 | ----------- | ------------------------------------------------- |
-| macOS/Linux | `/usr/local/bin/sandbox` (or `~/.local/bin/sandbox`) |
+| macOS/Linux | first writable PATH dir: `/opt/homebrew/bin`, `/usr/local/bin`, or `~/.local/bin` |
 | Windows     | `%LOCALAPPDATA%\Programs\sandbox\sandbox.exe`     |
 
 Override with env vars before running: `SANDBOX_REPO`, `SANDBOX_BRANCH`, `PREFIX`
@@ -171,7 +171,9 @@ bun install
 bun build --compile src/index.ts --outfile sandbox            # host target
 # macOS only — re-sign so it runs:
 codesign --remove-signature sandbox && codesign --force --deep -s - sandbox
-install -m 0755 sandbox /usr/local/bin/sandbox                 # put it on PATH
+# Install onto a PATH dir you own. /usr/local/bin is root-owned on Apple
+# Silicon (use sudo there, or ~/.local/bin). Restart `sandbox serve` after.
+install -m 0755 sandbox /opt/homebrew/bin/sandbox                 # put it on PATH
 ```
 
 **Dev mode (no compile)** — runs straight from TypeScript, picks up edits on restart:

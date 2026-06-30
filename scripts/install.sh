@@ -20,10 +20,14 @@ BRANCH="${SANDBOX_BRANCH:-windows-support}"
 
 if [ -n "${PREFIX:-}" ]; then
   INSTALL_DIR="$PREFIX"
-elif [ -w "/usr/local/bin" ]; then
-  INSTALL_DIR="/usr/local/bin"
 else
-  INSTALL_DIR="$HOME/.local/bin"
+  # Prefer the first existing, writable bin dir (Apple Silicon Homebrew is
+  # /opt/homebrew/bin; /usr/local/bin is root-owned there and would need sudo).
+  INSTALL_DIR=""
+  for d in /opt/homebrew/bin /usr/local/bin "$HOME/.local/bin"; do
+    if [ -d "$d" ] && [ -w "$d" ]; then INSTALL_DIR="$d"; break; fi
+  done
+  [ -n "$INSTALL_DIR" ] || INSTALL_DIR="$HOME/.local/bin"
 fi
 mkdir -p "$INSTALL_DIR"
 
