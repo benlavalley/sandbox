@@ -5,6 +5,61 @@ import { Hono } from "hono";
 
 const { app, backends, sandboxService, ttlService } = createApp();
 
+/** True for the low-level "can't reach the Docker daemon" errors. */
+function isDockerConnError(err: unknown): boolean {
+  const code = (err as { code?: string } | null)?.code;
+  const msg = String((err as { message?: string } | null)?.message ?? err);
+  return (
+    code === "ECONNREFUSED" ||
+    code === "ENOENT" ||
+    code === "ECONNRESET" ||
+    code === "FailedToOpenSocket" ||
+    /ECONNREFUSED|FailedToOpenSocket|connect ENOENT/i.test(msg)
+  );
+}
+
+function printDockerUnreachable(): void {
+  console.error(`\n✖ Cannot reach the Docker daemon at ${config.dockerSocket}\n`);
+  console.error("  Make sure Docker is installed, running, and up to date, then start again.");
+  if (process.platform === "win32") {
+    console.error(
+      '  On Windows the CLI talks to Docker over TCP. In Docker Desktop turn on\n' +
+        '    Settings → General → "Expose daemon on tcp://localhost:2375 without TLS"\n' +
+        "  (or point DOCKER_SOCKET at your daemon, e.g. DOCKER_SOCKET=tcp://HOST:PORT).",
+    );
+  } else {
+    console.error(
+      `  Check the daemon is listening at ${config.dockerSocket} (or set DOCKER_SOCKET).`,
+    );
+  }
+  console.error("");
+}
+
+// Backstop: if a Docker connection error escapes as an unhandled rejection,
+// surface the actionable message instead of a raw stack trace.
+process.on("unhandledRejection", (err) => {
+  if (isDockerConnError(err)) {
+    printDockerUnreachable();
+  } else {
+    console.error(err);
+  }
+  process.exit(1);
+});
+
+/** Verify the Docker backend is reachable before we claim to be listening. */
+async function preflightDocker(): Promise<void> {
+  if (backends.linux.type !== "docker") return;
+  try {
+    await backends.linux.listSandboxes();
+  } catch (err) {
+    if (isDockerConnError(err)) {
+      printDockerUnreachable();
+      process.exit(1);
+    }
+    throw err;
+  }
+}
+
 // TTL reconciliation on startup
 async function reconcileTtls() {
   const allBackends = [backends.linux, backends.macos].filter(Boolean);
@@ -23,6 +78,9 @@ async function reconcileTtls() {
   }
   console.log(`Reconciled TTLs for ${sandboxes.length} sandbox(es)`);
 }
+
+// Fail fast with a clear message if Docker is unreachable, before we bind ports.
+await preflightDocker();
 
 reconcileTtls().catch(console.error);
 
