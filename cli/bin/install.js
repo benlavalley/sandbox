@@ -10,14 +10,17 @@ const { version } = require("../package.json");
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
-const REPO = "circlesac/sandbox";
+const REPO = process.env.SANDBOX_RELEASE_REPO || "circlesac/sandbox";
 
 const PLATFORMS = {
   "darwin-x64": { artifact: "sandbox-darwin-amd64", ext: ".tar.gz" },
   "darwin-arm64": { artifact: "sandbox-darwin-arm64", ext: ".tar.gz" },
   "linux-x64": { artifact: "sandbox-linux-amd64", ext: ".tar.gz" },
   "linux-arm64": { artifact: "sandbox-linux-arm64", ext: ".tar.gz" },
+  "win32-x64": { artifact: "sandbox-windows-amd64", ext: ".tar.gz" },
 };
+
+const binName = process.platform === "win32" ? "sandbox.exe" : "sandbox";
 
 function download(url) {
   return new Promise((resolve, reject) => {
@@ -53,4 +56,6 @@ const tmp = path.join(nativeDir, `tmp${ext}`);
 fs.writeFileSync(tmp, data);
 execSync(`tar xzf "${tmp}"`, { cwd: nativeDir });
 fs.unlinkSync(tmp);
-fs.chmodSync(path.join(nativeDir, "sandbox"), 0o755);
+if (process.platform !== "win32") {
+  fs.chmodSync(path.join(nativeDir, binName), 0o755);
+}

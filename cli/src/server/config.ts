@@ -3,7 +3,9 @@ export const config = {
   apiKeys: (process.env.API_KEYS ?? "").split(",").filter(Boolean),
   backend: process.env.SANDBOX_BACKEND ?? "docker",
   macosBackend: process.env.SANDBOX_MACOS_BACKEND ?? (process.platform === "darwin" ? "tart" : undefined),
-  dockerSocket: process.env.DOCKER_SOCKET ?? "/var/run/docker.sock",
+  dockerSocket:
+    process.env.DOCKER_SOCKET ??
+    (process.platform === "win32" ? "//./pipe/docker_engine" : "/var/run/docker.sock"),
   defaultTimeoutSec: Number(process.env.DEFAULT_TIMEOUT_SEC ?? 300),
   maxTimeoutSec: Number(process.env.MAX_TIMEOUT_SEC ?? 3600),
   envdPort: 49983,
