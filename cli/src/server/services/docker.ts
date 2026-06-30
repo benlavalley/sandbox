@@ -13,13 +13,28 @@ function registryImageName(templateId: string) {
   return `${REGISTRY}/sandbox-${templateId}:latest`;
 }
 
+/**
+ * Build a dockerode client from a socket/endpoint string. Supports a unix
+ * socket or named-pipe path, an `npipe://` URL, or a `tcp://`/`http://` TCP
+ * endpoint. TCP is required on Windows: the Bun runtime can't open the Docker
+ * named pipe via socketPath, so point DOCKER_SOCKET at Docker Desktop's TCP
+ * endpoint ("Expose daemon on tcp://localhost:2375 without TLS").
+ */
+function createDockerClient(socket: string): Docker {
+  const tcp = /^(?:tcp|http):\/\/(?:[^@/]*@)?([^:/]+):(\d+)/.exec(socket);
+  if (tcp) {
+    return new Docker({ host: tcp[1], port: Number(tcp[2]), protocol: "http" });
+  }
+  return new Docker({ socketPath: socket.replace(/^npipe:\/\//, "") });
+}
+
 export class DockerService implements ContainerBackend {
   readonly type = "docker" as const;
   readonly supportsPause = true;
   private docker: Docker;
 
   constructor(opts: { socketPath: string }) {
-    this.docker = new Docker({ socketPath: opts.socketPath });
+    this.docker = createDockerClient(opts.socketPath);
   }
 
   async resolveImage(templateId: string): Promise<string> {

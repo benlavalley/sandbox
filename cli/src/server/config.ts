@@ -5,7 +5,7 @@ export const config = {
   macosBackend: process.env.SANDBOX_MACOS_BACKEND ?? (process.platform === "darwin" ? "tart" : undefined),
   dockerSocket:
     process.env.DOCKER_SOCKET ??
-    (process.platform === "win32" ? "//./pipe/docker_engine" : "/var/run/docker.sock"),
+    (process.platform === "win32" ? "tcp://localhost:2375" : "/var/run/docker.sock"),
   defaultTimeoutSec: Number(process.env.DEFAULT_TIMEOUT_SEC ?? 300),
   maxTimeoutSec: Number(process.env.MAX_TIMEOUT_SEC ?? 3600),
   envdPort: 49983,
