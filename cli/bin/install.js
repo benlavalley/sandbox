@@ -39,6 +39,12 @@ function download(url) {
 
 if (process.env.CI) process.exit(0);
 
+// Skip when running from a source checkout. The published package ships only
+// `bin/` (see package.json "files"), so the presence of `../src` means we're in
+// the repo and should build from source, not download a (possibly nonexistent)
+// release for the current version.
+if (fs.existsSync(path.join(__dirname, "..", "src"))) process.exit(0);
+
 const platform = `${process.platform}-${process.arch}`;
 const info = PLATFORMS[platform];
 if (!info) {
