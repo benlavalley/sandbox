@@ -1,10 +1,47 @@
 services:
+  sandbox:
+    build:
+      context: .
+      dockerfile: docker/server/Dockerfile
+    network_mode: host
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ${HOME}/.sandbox:/root/.sandbox
+    environment:
+      PORT: 49982
+    restart: always
+    healthcheck:
+      test:
+        - CMD
+        - bash
+        - -c
+        - >-
+          exec 3<>/dev/tcp/127.0.0.1/49982;
+          printf 'GET /health HTTP/1.0\r\nHost: localhost\r\nConnection: close\r\n\r\n' >&3;
+          grep -q -m1 '200 OK' <&3
+      interval: 5s
+      timeout: 3s
+      retries: 12
+
   cloudflared:
     image: cloudflare/cloudflared:latest
-    command: tunnel --config /etc/cloudflared/config.yml run
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
+    network_mode: host
+    command:
+      - tunnel
+      - --no-autoupdate
+      - run
+      - --token-file
+      - /run/secrets/tunnel-token
+      - --url
+      - http://localhost:49982
     volumes:
-      - ./cloudflared.yml:/etc/cloudflared/config.yml:ro
-      - ./cloudflared-credentials.json:/etc/cloudflared/credentials.json:ro
-    restart: unless-stopped
+      - type: bind
+        source: ${HOME}/.sandbox/cloudflared-tunnel-token
+        target: /run/secrets/tunnel-token
+        read_only: true
+        bind:
+          create_host_path: false
+    restart: always
+    depends_on:
+      sandbox:
+        condition: service_healthy

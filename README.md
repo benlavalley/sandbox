@@ -31,6 +31,25 @@ brew install circlesac/tap/sandbox
 sandbox serve
 ```
 
+### Persistent OrbStack control plane
+
+To run the control plane itself in Docker on macOS, start OrbStack at login and
+launch the sandbox service with the OrbStack Docker context:
+
+```bash
+docker --context orbstack build -t sandbox-base:latest docker/sandbox
+docker --context orbstack compose build --no-cache sandbox
+docker --context orbstack compose up -d sandbox
+```
+
+The Compose service mounts the Docker socket and `~/.sandbox`, listens on the
+host's port `49982`, and uses `restart: always` so OrbStack restores it after
+login or reboot. Use `docker --context orbstack compose ps sandbox` and
+`sandbox status` to verify both the container and the E2B control plane.
+
+The service intentionally uses `restart: always`, not `unless-stopped`, so it
+returns whenever the OrbStack Docker engine starts.
+
 ### Shuru (Linux microVMs on macOS)
 
 ```bash
@@ -61,6 +80,40 @@ SANDBOX_MACOS_BACKEND=tart sandbox serve
 
 envd-lite is pre-installed in the base image with a LaunchAgent, so each sandbox only needs to clone the VM and boot it. VM creation takes ~30-60s depending on host CPU.
 
+### Public endpoint for a local control plane
+
+When a remote Padawan, Worker, or test runner needs to reach a local control
+plane, run `cloudflared` in the same Docker Compose project. Derive a stable
+per-device hostname from the Mac's hardware serial so multiple machines do not
+claim the same DNS record:
+
+```bash
+SANDBOX_DEVICE_HASH="$(printf '%s' "$(ioreg -rd1 -c IOPlatformExpertDevice | awk -F'"' '/IOPlatformSerialNumber/{print $4}')" | shasum -a 256 | cut -c1-8)"
+SANDBOX_TUNNEL_NAME="sandbox-${SANDBOX_DEVICE_HASH}"
+SANDBOX_PUBLIC_HOSTNAME="sandbox-${SANDBOX_DEVICE_HASH}.crcl.es"
+
+# One-time Cloudflare setup. `login` writes the local management certificate;
+# the token file is the only credential mounted into the runtime container.
+cloudflared tunnel login
+cloudflared tunnel create "$SANDBOX_TUNNEL_NAME"
+cloudflared tunnel route dns "$SANDBOX_TUNNEL_NAME" "$SANDBOX_PUBLIC_HOSTNAME"
+cloudflared tunnel token "$SANDBOX_TUNNEL_NAME" > ~/.sandbox/cloudflared-tunnel-token
+chmod 600 ~/.sandbox/cloudflared-tunnel-token
+
+docker --context orbstack compose up -d cloudflared
+docker --context orbstack compose ps sandbox cloudflared
+curl -fsS "https://${SANDBOX_PUBLIC_HOSTNAME}/health"
+```
+
+The `cloudflared` container routes the tunnel to `http://localhost:49982`, uses
+host networking, waits for the sandbox health check, and has `restart: always`,
+so OrbStack restores both services after login or reboot. Never commit
+the token file or pass it on the command line.
+
+Use `https://sandbox-${SANDBOX_DEVICE_HASH}.crcl.es` for both the E2B SDK's `apiUrl`
+and `sandboxUrl`. This is a physical-device naming convention for the control
+plane, not a Docker-only or per-container hostname.
+
 ## Usage
 
 The E2B SDK works the same across all backends. Use `metadata.platform` to select the platform:
@@ -70,7 +123,7 @@ import Sandbox from "e2b";
 
 const opts = {
   apiUrl: "http://localhost:49982",
-  apiKey: "e2b_.....",
+  apiKey: "e2b_...",
 };
 
 // Linux sandbox (default)
@@ -85,6 +138,21 @@ const macos = await Sandbox.create("base", {
 });
 const result2 = await macos.commands.run("sw_vers -productName");
 // → "macOS"
+```
+
+Recent E2B SDKs validate keys as `e2b_` followed by 40 hex characters before
+making a request. `sandbox serve` generates keys in that format. A config
+created before this change holds an `sk-sandbox-*` key: replace it with a key in
+the new format, or set `validateApiKey: false` on the client. The flag disables
+only the SDK's local format check; the control plane still authenticates the
+key. For Padawan's PTY smoke with an older key, use the equivalent environment
+setting:
+
+```bash
+E2B_VALIDATE_API_KEY=false \
+SANDBOX_API_URL=http://localhost:49982 \
+SANDBOX_API_KEY="$(jq -r .apiKey ~/.sandbox/config.json)" \
+bun run smoke:pty
 ```
 
 ## Architecture

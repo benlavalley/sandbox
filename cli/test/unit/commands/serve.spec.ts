@@ -34,8 +34,8 @@ describe("serve command", () => {
     await run([]);
 
     expect(writeConfigMock).toHaveBeenCalledOnce();
-    const written = writeConfigMock.mock.calls[0][0];
-    expect(written.apiKey).toMatch(/^e2b_/);
+    const written = writeConfigMock.mock.calls[0]![0];
+    expect(written.apiKey).toMatch(/^e2b_[0-9a-f]{40}$/);
     expect(process.env.API_KEYS).toBe(written.apiKey);
   });
 
